@@ -1,0 +1,133 @@
+---
+title: "PML_coursera_Assignment"
+output: html_document
+---
+#Getting the data
+
+The training data set and test data set can be found on the following URL:
+And are read via read.csv() as below.
+```{r}
+trainUrl <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+
+testUrl <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+training <- read.csv(url(trainUrl), na.strings=c("NA","#DIV/0!",""))
+
+testing <- read.csv(url(testUrl), na.strings=c("NA","#DIV/0!",""))
+```
+#Cleaning Data Set
+```{r}
+# Starting the Cleaning Process
+library(caret)
+nzvCol <- nearZeroVar(training)
+training <- training[,-nzvCol]
+
+# Since we have lots of variables, remove any with NA's or have empty strings, and the one's that are not predictors variables
+filterData <- function(idf) {
+    idx.keep <- !sapply(idf, function(x) any(is.na(x)))
+    idf <- idf[, idx.keep]
+    idx.keep <- !sapply(idf, function(x) any(x==""))
+    idf <- idf[, idx.keep]
+    
+    # Remove the columns that aren't the predictor variables
+    col.rm <- c("X", "user_name", "raw_timestamp_part_1", "raw_timestamp_part_2", 
+                "cvtd_timestamp", "new_window", "num_window")
+    idx.rm <- which(colnames(idf) %in% col.rm)
+    idf <- idf[, -idx.rm]
+    return(idf)
+}
+
+training <- filterData(training)
+finalTrainingDS <- training
+dim(finalTrainingDS)
+
+```
+
+
+
+```{r}
+# Now let's perform the same cleaning process to the testing dataset as well
+library(caret)
+nzvCol <- nearZeroVar(testing)
+testing <- testing[,-nzvCol]
+testing <- filterData(testing)
+finalTestingDS <- testing
+dim(finalTestingDS)
+```
+
+#Exploratory Data Analysis
+```{r}
+summary(finalTrainingDS$classe)
+
+```
+```{r ,echo=FALSE}
+plot(finalTrainingDS$classe,col=c("red", "green", "yellow", "blue", "orange"),main = "`classe` frequency plot", xlab = "Types of Weight Lifting Exercices")
+```
+
+#Model Building
+### Data Partitioning
+Partioning Training data set into two data sets, 60% for myTraining, 40% for myTesting:
+```{r}
+library(caret)
+inTrain <- createDataPartition(y=finalTrainingDS$classe, p=0.6, list=FALSE)
+myTraining <- training[inTrain, ]; myTesting <- training[-inTrain, ]
+dim(myTraining); dim(myTesting)
+```
+
+###Using ML algorithm for prediction : Decision Tree
+1) Fitting the algorithm
+
+library(rpart)
+library(rattle)
+modFitA1 <- rpart(classe ~ ., data=myTraining, method="class")
+fancyRpartPlot(modFitA1)
+
+2) Using the fitted algorithm to Predict
+
+library(stats)
+predictionsA1 <- predict(modFitA1, myTesting, type = "class")
+
+3) Confusion Matrix to check efficiency of model
+
+confusionMatrix(predictionsA1, myTesting$classe)
+
+###Using ML algorithm for prediction : Random Forest
+1) Fitting the algorithm
+```{r}
+library(rpart)
+library(rattle)
+library(randomForest)
+modFitB1 <- randomForest(classe ~. , data=myTraining)
+```
+2) Using the fitted algorithm to Predict
+```{r}
+library(stats)
+
+predictionsB1 <- predict(modFitB1, myTesting, type = "class")
+```
+3)Confusion Matrix to check efficiency of model : Out of sample Error
+```{r}
+confusionMatrix(predictionsB1, myTesting$classe)
+```
+
+
+#Random forest yeilds better result
+```{r}
+library(stats)
+predictionsB2 <- predict(modFitB1, testing, type = "class")
+
+```
+Now predictionsB2 contains the predicted value for all the test cases.
+The assignment demands one .txt file per test case and hence we iterate over the predictionsB2 to write each prediction into individual .txt file.
+code below:
+```{r}
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+pml_write_files(predictionsB2)
+```
